@@ -35,26 +35,23 @@ export const PlaceOrderForm: FC<PlaceOrderFormProps> = ({ design, onClose }) => 
                 program.programId
             );
 
-            // Get the store account to find its authority
             const storeAccount = await program.account.store.fetch(storePda);
-            
-            // Use the actual store authority from the store account
-            const storeAuthority = storeAccount.authority;
 
-            // Generate Order PDA
             const [orderPda] = PublicKey.findProgramAddressSync(
                 [
                     Buffer.from("order"),
                     storePda.toBuffer(),
-                    publicKey.toBuffer(),
+                    publicKey.toBuffer()
                 ],
                 program.programId
             );
 
-            console.log("Store PDA:", storePda.toString());
-            console.log("Store Authority:", storeAuthority.toString());
-            console.log("Buyer:", publicKey.toString());
-            console.log("Generated Order PDA:", orderPda.toString());
+            console.log('Creating order with:', {
+                orderPda: orderPda.toString(),
+                storePda: storePda.toString(),
+                storeAuthority: storeAccount.authority.toString(),
+                buyer: publicKey.toString()
+            });
 
             const tx = await program.methods
                 .createOrder(shippingInfo)
@@ -62,7 +59,7 @@ export const PlaceOrderForm: FC<PlaceOrderFormProps> = ({ design, onClose }) => 
                     order: orderPda,
                     design: design.publicKey,
                     store: storePda,
-                    storeAuthority: storeAuthority,
+                    storeAuthority: storeAccount.authority,
                     buyer: publicKey,
                     systemProgram: anchor.web3.SystemProgram.programId,
                 })
@@ -76,12 +73,12 @@ export const PlaceOrderForm: FC<PlaceOrderFormProps> = ({ design, onClose }) => 
 
             onClose();
         } catch (error: any) {
+            console.error('Full error:', error);
             notify({ 
                 type: 'error', 
                 message: 'Failed to place order',
                 description: error?.message 
             });
-            console.error('Error placing order:', error);
         } finally {
             setIsLoading(false);
         }
