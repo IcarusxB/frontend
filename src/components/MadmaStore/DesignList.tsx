@@ -5,6 +5,8 @@ import { notify } from '../../utils/notifications';
 import { PublicKey } from '@solana/web3.js';
 import { BN } from '@project-serum/anchor';
 import { Program, ProgramAccount } from '@project-serum/anchor';
+import { EditDesignForm } from './EditDesignForm';
+import { PlaceOrderForm } from './PlaceOrderForm';
 
 interface DesignAccount {
     store: PublicKey;
@@ -25,6 +27,9 @@ const DesignList: FC<{ ownerView?: boolean }> = ({ ownerView = false }) => {
     const { publicKey } = useWallet();
     const [designs, setDesigns] = useState<ProgramDesign[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [selectedDesign, setSelectedDesign] = useState<ProgramDesign | null>(null);
+    const [showEditForm, setShowEditForm] = useState(false);
+    const [showOrderForm, setShowOrderForm] = useState(false);
 
     const fetchDesigns = useCallback(async () => {
         if (!program) {
@@ -59,6 +64,47 @@ const DesignList: FC<{ ownerView?: boolean }> = ({ ownerView = false }) => {
         ownerView || design.account.available
     );
 
+    const handleToggleAvailability = async (design: ProgramDesign) => {
+        if (!program || !publicKey) {
+            notify({ type: 'error', message: 'Please connect your wallet!' });
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const [storePda] = PublicKey.findProgramAddressSync(
+                [Buffer.from("store")],
+                program.programId
+            );
+
+            const tx = await program.methods
+                .toggleDesignAvailability()
+                .accounts({
+                    design: design.publicKey,
+                    store: storePda,
+                    authority: publicKey,
+                })
+                .rpc();
+
+            notify({ 
+                type: 'success', 
+                message: `Design ${design.account.available ? 'disabled' : 'enabled'} successfully!`,
+                txid: tx 
+            });
+
+            await fetchDesigns();
+        } catch (error: any) {
+            console.error('Error:', error);
+            notify({ 
+                type: 'error', 
+                message: 'Failed to toggle design availability',
+                description: error?.message 
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     if (isLoading) {
         return <div className="text-center py-4">Loading designs...</div>;
     }
@@ -92,25 +138,34 @@ const DesignList: FC<{ ownerView?: boolean }> = ({ ownerView = false }) => {
                                 {design.account.price.toNumber() / 1e9} SOL
                             </span>
                             {ownerView ? (
-                                <button
-                                    className={`px-4 py-2 text-white rounded
-                                        ${design.account.available 
-                                            ? 'bg-red-600 hover:bg-red-700' 
-                                            : 'bg-green-600 hover:bg-green-700'}`}
-                                    onClick={() => {
-                                        // Add toggle availability logic here
-                                        console.log('Toggle availability for:', design.publicKey.toString());
-                                    }}
-                                >
-                                    {design.account.available ? 'Disable' : 'Enable'}
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                        onClick={() => {
+                                            setSelectedDesign(design);
+                                            setShowEditForm(true);
+                                        }}
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        className={`px-4 py-2 text-white rounded
+                                            ${design.account.available 
+                                                ? 'bg-red-600 hover:bg-red-700' 
+                                                : 'bg-green-600 hover:bg-green-700'}`}
+                                        onClick={() => handleToggleAvailability(design)}
+                                    >
+                                        {design.account.available ? 'Disable' : 'Enable'}
+                                    </button>
+                                </div>
                             ) : (
                                 <button
                                     className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
                                     onClick={() => {
-                                        // Add purchase logic here
-                                        console.log('Purchase clicked for:', design.publicKey.toString());
+                                        setSelectedDesign(design);
+                                        setShowOrderForm(true);
                                     }}
+                                    disabled={!design.account.available}
                                 >
                                     Buy Now
                                 </button>
@@ -119,6 +174,33 @@ const DesignList: FC<{ ownerView?: boolean }> = ({ ownerView = false }) => {
                     </div>
                 </div>
             ))}
+
+            {/* Edit Form Modal */}
+            {showEditForm && selectedDesign && (
+                <EditDesignForm
+                    design={selectedDesign}
+                    onClose={() => {
+                        setShowEditForm(false);
+                        setSelectedDesign(null);
+                    }}
+                    onSuccess={() => {
+                        fetchDesigns();
+                        setShowEditForm(false);
+                        setSelectedDesign(null);
+                    }}
+                />
+            )}
+
+            {/* Order Form Modal */}
+            {showOrderForm && selectedDesign && (
+                <PlaceOrderForm
+                    design={selectedDesign}
+                    onClose={() => {
+                        setShowOrderForm(false);
+                        setSelectedDesign(null);
+                    }}
+                />
+            )}
         </div>
     );
 };
